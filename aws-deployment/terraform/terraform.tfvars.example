@@ -1,0 +1,28 @@
+# Copy this file to terraform.tfvars and update with your values
+
+aws_region = "us-east-1"
+project_name = "squid-proxy"
+
+# Network Configuration
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Proxy Configuration
+proxy_port = 3128
+
+# Instance Configuration
+instance_type = "t3.medium"
+min_instances = 2
+max_instances = 5
+desired_instances = 2
+
+# Security
+key_pair_name = "your-key-pair-name"  # REQUIRED: Create this in AWS EC2 first
+ssh_access_cidr = "0.0.0.0/0"  # Change to your IP for better security
+
+# AMI (leave empty to use latest Ubuntu 22.04)
+ami_id = ""
+
+# Admin Credentials (CHANGE THESE!)
+admin_username = "admin"
+admin_password = "ChangeMe123!"
