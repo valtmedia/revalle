@@ -264,9 +264,10 @@ resource "aws_launch_template" "proxy_lt" {
   vpc_security_group_ids = [aws_security_group.proxy_sg.id]
 
   user_data = base64encode(templatefile("${path.module}/user-data.sh", {
-    proxy_port     = var.proxy_port
-    admin_username = var.admin_username
-    admin_password = var.admin_password
+    proxy_port      = var.proxy_port
+    admin_username  = var.admin_username
+    admin_password  = var.admin_password
+    control_plane_url = var.control_plane_url != "" ? var.control_plane_url : ""
   }))
 
   iam_instance_profile {

@@ -206,6 +206,73 @@ sleep 5
 if systemctl is-active --quiet squid || service squid status > /dev/null 2>&1; then
     echo "Squid proxy installation completed successfully at $(date)" > /var/log/squid-install.log
     echo "SUCCESS: Squid proxy is running"
+    
+    # Install Proxy Node Agent (if control plane URL is provided)
+    if [ -n "${control_plane_url}" ] && [ "${control_plane_url}" != "" ]; then
+        echo "Installing Proxy Node Agent..."
+        
+        # Install dependencies
+        apt-get install -y curl jq net-tools || true
+        
+        # Create agent directory
+        mkdir -p /opt/proxy-node-agent
+        
+        # Get instance metadata
+        INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || echo "local-$(hostname)")
+        NODE_ID="node-${INSTANCE_ID}"
+        echo "$NODE_ID" > /tmp/proxy-node-id
+        echo "${control_plane_url}" > /tmp/control-plane-url
+        
+        # Get proxy host and region
+        PROXY_HOST=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || hostname -I | awk '{print $1}')
+        REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "us-east-1")
+        
+        # Create heartbeat script
+        cat > /opt/proxy-node-agent/heartbeat.sh <<'HEARTBEATEOF'
+#!/bin/bash
+NODE_ID=$(cat /tmp/proxy-node-id 2>/dev/null)
+CONTROL_PLANE_URL=$(cat /tmp/control-plane-url 2>/dev/null)
+if [ -z "$NODE_ID" ] || [ -z "$CONTROL_PLANE_URL" ]; then exit 0; fi
+CURRENT_LOAD=$(netstat -an 2>/dev/null | grep -c ESTABLISHED || echo 0)
+HEALTH=$(systemctl is-active --quiet squid 2>/dev/null && echo "healthy" || echo "unhealthy")
+curl -s -X POST "$CONTROL_PLANE_URL/api/nodes/$NODE_ID/heartbeat" \
+  -H "Content-Type: application/json" \
+  -d "{\"load\":$CURRENT_LOAD,\"health\":\"$HEALTH\"}" > /dev/null
+HEARTBEATEOF
+        chmod +x /opt/proxy-node-agent/heartbeat.sh
+        
+        # Setup heartbeat timer
+        cat > /etc/systemd/system/proxy-node-heartbeat.timer <<HEARTBEATEOF
+[Unit]
+Description=Proxy Node Heartbeat Timer
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=30s
+Unit=proxy-node-heartbeat.service
+[Install]
+WantedBy=timers.target
+HEARTBEATEOF
+        
+        cat > /etc/systemd/system/proxy-node-heartbeat.service <<'HEARTBEATEOF'
+[Unit]
+Description=Proxy Node Heartbeat Service
+After=network.target
+[Service]
+Type=oneshot
+ExecStart=/opt/proxy-node-agent/heartbeat.sh
+HEARTBEATEOF
+        
+        systemctl daemon-reload
+        systemctl enable proxy-node-heartbeat.timer
+        systemctl start proxy-node-heartbeat.timer
+        
+        # Register node after a delay
+        sleep 15
+        curl -s -X POST "${control_plane_url}/api/nodes/register" \
+          -H "Content-Type: application/json" \
+          -d "{\"id\":\"$NODE_ID\",\"name\":\"$(hostname)\",\"host\":\"$PROXY_HOST\",\"port\":${proxy_port:-3128},\"region\":\"$REGION\",\"capacity\":1000}" > /dev/null && \
+          echo "Node registered with control plane" || echo "Node registration will retry via heartbeat"
+    fi
 else
     echo "ERROR: Squid proxy failed to start" > /var/log/squid-install.log
     systemctl status squid || service squid status

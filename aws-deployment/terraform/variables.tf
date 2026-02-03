@@ -88,3 +88,9 @@ variable "admin_password" {
   default     = "ChangeMe123!"
   sensitive   = true
 }
+
+variable "control_plane_url" {
+  description = "Control Plane API URL for node registration (optional, leave empty to disable)"
+  type        = string
+  default     = ""
+}
