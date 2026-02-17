@@ -1,0 +1,30 @@
+version: '3.8'
+
+# Development overrides
+services:
+  control-plane:
+    build:
+      context: ./control-plane
+      target: development
+    volumes:
+      - ./control-plane:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - DEBUG=proxy:*
+    command: npx nodemon server.js
+
+  redis:
+    command: redis-server --appendonly yes
+
+  mysql:
+    ports:
+      - "3307:3306"  # Different port for dev
+    environment:
+      - MYSQL_ROOT_PASSWORD=devroot123
+
+  squid-proxy:
+    environment:
+      - CONTROL_PLANE_URL=http://control-plane:3000
+      - NODE_NAME=squid-dev-1

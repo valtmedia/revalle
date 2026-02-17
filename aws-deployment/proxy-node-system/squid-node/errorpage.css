@@ -1,0 +1,66 @@
+/* Custom error page styles for ProxyNodeSystem */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f1923;
+    color: #e0e0e0;
+    margin: 0;
+    padding: 40px 20px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+}
+
+#titles {
+    background: #1a2332;
+    border: 1px solid #2d3748;
+    border-radius: 12px;
+    padding: 40px;
+    max-width: 700px;
+    width: 100%;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+#titles h1 {
+    color: #60a5fa;
+    font-size: 28px;
+    margin-top: 0;
+    border-bottom: 2px solid #2d3748;
+    padding-bottom: 15px;
+}
+
+#titles h2 {
+    color: #f59e0b;
+    font-size: 20px;
+}
+
+#content {
+    line-height: 1.6;
+    font-size: 14px;
+}
+
+#content p {
+    margin: 10px 0;
+}
+
+a {
+    color: #60a5fa;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid #2d3748;
+    margin: 20px 0;
+}
+
+.footer {
+    font-size: 12px;
+    color: #718096;
+    text-align: center;
+    margin-top: 30px;
+}

@@ -1,0 +1,137 @@
+# ===========================================
+# Prometheus Alert Rules
+# ===========================================
+
+groups:
+  - name: proxy_node_alerts
+    interval: 30s
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(proxy_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors/sec (threshold: 0.1/sec)"
+
+      # Node down
+      - alert: ProxyNodeDown
+        expr: up{job="squid-nodes"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Proxy node {{ $labels.instance }} is down"
+          description: "Node has been unreachable for more than 2 minutes"
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: proxy_node_cpu_usage > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.node_id }}"
+          description: "CPU usage is {{ $value }}% (threshold: 85%)"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: proxy_node_memory_usage > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.node_id }}"
+          description: "Memory usage is {{ $value }}% (threshold: 90%)"
+
+      # High connection count
+      - alert: HighConnectionCount
+        expr: proxy_active_connections > 800
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High connection count on {{ $labels.node_id }}"
+          description: "Active connections: {{ $value }} (threshold: 800)"
+
+      # Low cache hit ratio
+      - alert: LowCacheHitRatio
+        expr: proxy_cache_hit_ratio < 0.2
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Low cache hit ratio on {{ $labels.node_id }}"
+          description: "Cache hit ratio is {{ $value }} (threshold: 0.2)"
+
+      # Control plane high latency
+      - alert: ControlPlaneHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="control-plane"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Control plane API latency is high"
+          description: "95th percentile latency is {{ $value }}s (threshold: 2s)"
+
+      # Too few nodes
+      - alert: InsufficientNodes
+        expr: proxy_healthy_nodes_total < 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Insufficient healthy proxy nodes"
+          description: "Only {{ $value }} healthy nodes available (minimum: 2)"
+
+      # Disk space low
+      - alert: DiskSpaceLow
+        expr: proxy_node_disk_usage > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space low on {{ $labels.node_id }}"
+          description: "Disk usage is {{ $value }}% (threshold: 85%)"
+
+      # Redis connection issues
+      - alert: RedisConnectionFailed
+        expr: redis_connected_clients == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis connection failed"
+          description: "No clients connected to Redis"
+
+  - name: proxy_sla_alerts
+    interval: 60s
+    rules:
+      # SLA violation - uptime below 99.9%
+      - alert: SLAViolation
+        expr: avg_over_time(up{job="squid-nodes"}[1h]) < 0.999
+        for: 30m
+        labels:
+          severity: critical
+          team: sre
+        annotations:
+          summary: "SLA violation - uptime below 99.9%"
+          description: "Proxy availability is {{ $value | humanizePercentage }} over the last hour"
+
+      # Request success rate below SLA
+      - alert: RequestSuccessRateLow
+        expr: |
+          (
+            sum(rate(proxy_requests_total{status=~"2.."}[1h]))
+            /
+            sum(rate(proxy_requests_total[1h]))
+          ) < 0.995
+        for: 15m
+        labels:
+          severity: critical
+          team: sre
+        annotations:
+          summary: "Request success rate below SLA"
+          description: "Success rate is {{ $value | humanizePercentage }} (SLA: 99.5%)"

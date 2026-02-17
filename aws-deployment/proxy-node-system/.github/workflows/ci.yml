@@ -1,0 +1,353 @@
+# ===========================================
+# CI/CD Pipeline - Proxy Node System
+# ===========================================
+
+name: Proxy Node System CI/CD
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**' ]
+    paths:
+      - 'aws-deployment/proxy-node-system/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'aws-deployment/proxy-node-system/**'
+
+env:
+  NODE_VERSION: '18'
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  # ===========================================
+  # Lint & Static Analysis
+  # ===========================================
+  lint:
+    name: Lint & Code Quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aws-deployment/proxy-node-system/control-plane
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: aws-deployment/proxy-node-system/control-plane/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npx eslint . --ext .js --format stylish --max-warnings 0
+
+      - name: Check for security vulnerabilities
+        run: npm audit --production --audit-level=high
+        continue-on-error: true
+
+      - name: Check for outdated packages
+        run: npm outdated || true
+
+  # ===========================================
+  # Unit Tests
+  # ===========================================
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    defaults:
+      run:
+        working-directory: aws-deployment/proxy-node-system/control-plane
+    strategy:
+      matrix:
+        node-version: [16, 18, 20]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: aws-deployment/proxy-node-system/control-plane/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test-jwt-secret
+
+      - name: Upload coverage report
+        if: matrix.node-version == 18
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: aws-deployment/proxy-node-system/control-plane/coverage/
+
+  # ===========================================
+  # Integration Tests with Docker
+  # ===========================================
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: test
+    defaults:
+      run:
+        working-directory: aws-deployment/proxy-node-system
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test containers
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml build
+
+      - name: Run integration tests
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml up \
+            --abort-on-container-exit \
+            --exit-code-from control-plane \
+            --timeout 120
+
+      - name: Collect test logs
+        if: always()
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs > test-logs.txt 2>&1
+          
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs
+          path: aws-deployment/proxy-node-system/test-logs.txt
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml down -v
+
+  # ===========================================
+  # Security Scan
+  # ===========================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner (filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'aws-deployment/proxy-node-system'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Build Docker image for scanning
+        run: |
+          cd aws-deployment/proxy-node-system/control-plane
+          docker build -t proxy-control-plane:scan .
+
+      - name: Run Trivy vulnerability scanner (image)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'proxy-control-plane:scan'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+  # ===========================================
+  # Build & Push Docker Images
+  # ===========================================
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test, integration-test, security-scan]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/proxy-control-plane
+          tags: |
+            type=ref,event=branch
+            type=sha
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push Control Plane image
+        uses: docker/build-push-action@v5
+        with:
+          context: aws-deployment/proxy-node-system/control-plane
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Squid Node image
+        uses: docker/build-push-action@v5
+        with:
+          context: aws-deployment/proxy-node-system/squid-node
+          push: true
+          tags: ghcr.io/${{ github.repository }}/proxy-squid-node:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================
+  # Deploy to Staging
+  # ===========================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: https://staging-proxy.example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Deploy to Staging
+        working-directory: aws-deployment/proxy-node-system/terraform
+        run: |
+          terraform init -backend-config="key=staging/terraform.tfstate"
+          terraform plan -var="environment=staging" -var="image_tag=${{ github.sha }}" -out=plan.out
+          terraform apply -auto-approve plan.out
+
+      - name: Run smoke tests
+        run: |
+          STAGING_URL="${{ secrets.STAGING_URL }}"
+          echo "Running smoke tests against $STAGING_URL..."
+          
+          # Health check
+          HTTP_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$STAGING_URL/health" || echo "000")
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Health check failed with status $HTTP_STATUS"
+            exit 1
+          fi
+          
+          # API check
+          HTTP_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$STAGING_URL/api/nodes" || echo "000")
+          if [ "$HTTP_STATUS" != "200" ] && [ "$HTTP_STATUS" != "401" ]; then
+            echo "API check failed with status $HTTP_STATUS"
+            exit 1
+          fi
+          
+          echo "Smoke tests passed!"
+
+  # ===========================================
+  # Deploy to Production
+  # ===========================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://proxy.example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Deploy to Production
+        working-directory: aws-deployment/proxy-node-system/terraform
+        run: |
+          terraform init -backend-config="key=production/terraform.tfstate"
+          terraform plan -var="environment=production" -var="image_tag=${{ github.sha }}" -out=plan.out
+          terraform apply -auto-approve plan.out
+
+      - name: Rolling update ECS services
+        run: |
+          aws ecs update-service \
+            --cluster proxy-production \
+            --service proxy-control-plane \
+            --force-new-deployment \
+            --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100"
+
+      - name: Wait for deployment stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster proxy-production \
+            --services proxy-control-plane \
+            --timeout 600
+
+      - name: Run production smoke tests
+        run: |
+          PROD_URL="${{ secrets.PRODUCTION_URL }}"
+          echo "Running production smoke tests..."
+          
+          for i in 1 2 3; do
+            HTTP_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$PROD_URL/health" || echo "000")
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "Production health check passed!"
+              exit 0
+            fi
+            echo "Attempt $i failed (status: $HTTP_STATUS). Retrying..."
+            sleep 10
+          done
+          
+          echo "Production health checks failed!"
+          exit 1
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "::notice::Production deployment successful! Image: ${{ github.sha }}"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "::error::Deployment failed! Rolling back..."
+          aws ecs update-service \
+            --cluster proxy-production \
+            --service proxy-control-plane \
+            --task-definition proxy-control-plane:$(aws ecs describe-services --cluster proxy-production --services proxy-control-plane --query 'services[0].deployments[1].taskDefinition' --output text | rev | cut -d: -f1 | rev)

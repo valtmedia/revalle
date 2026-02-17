@@ -1,0 +1,56 @@
+version: '3.8'
+
+# Test overrides - used by CI/CD
+services:
+  control-plane:
+    build:
+      context: ./control-plane
+      target: test
+    environment:
+      - NODE_ENV=test
+      - LOG_LEVEL=error
+      - REDIS_URL=redis://redis:6379
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=proxy_admin
+      - MYSQL_PASSWORD=testpassword
+      - MYSQL_DATABASE=proxy_system_test
+      - JWT_SECRET=test-jwt-secret
+    command: npm test
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  redis:
+    command: redis-server --appendonly no
+
+  mysql:
+    environment:
+      - MYSQL_ROOT_PASSWORD=testroot
+      - MYSQL_DATABASE=proxy_system_test
+      - MYSQL_USER=proxy_admin
+      - MYSQL_PASSWORD=testpassword
+    tmpfs:
+      - /var/lib/mysql  # Speed up tests with tmpfs
+
+  # Disable services not needed for tests
+  squid-proxy:
+    deploy:
+      replicas: 0
+  prometheus:
+    deploy:
+      replicas: 0
+  grafana:
+    deploy:
+      replicas: 0
+  dashboard:
+    deploy:
+      replicas: 0
+  loki:
+    deploy:
+      replicas: 0
+  promtail:
+    deploy:
+      replicas: 0

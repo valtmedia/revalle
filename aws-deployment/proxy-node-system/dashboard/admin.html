@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy Node System - Admin Dashboard</title>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --secondary: #64748b;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #0f172a;
+            --bg-card: #1e293b;
+            --bg-hover: #334155;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --sidebar-width: 260px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-card);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .sidebar-logo .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: var(--primary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .sidebar-logo h1 {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 1rem 0.75rem;
+            overflow-y: auto;
+        }
+
+        .nav-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .nav-section-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            padding: 0 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.625rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: all 0.15s;
+            font-size: 0.875rem;
+        }
+
+        .nav-item:hover { background: var(--bg-hover); color: var(--text); }
+        .nav-item.active { background: var(--primary); color: white; }
+
+        .nav-item .badge {
+            margin-left: auto;
+            background: var(--danger);
+            color: white;
+            font-size: 0.7rem;
+            padding: 0.125rem 0.5rem;
+            border-radius: 10px;
+            min-width: 20px;
+            text-align: center;
+        }
+
+        /* Main Content */
+        .main {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .topbar {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .topbar-left { display: flex; align-items: center; gap: 1rem; }
+        .topbar-right { display: flex; align-items: center; gap: 1rem; }
+
+        .search-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            color: var(--text);
+            width: 300px;
+            font-size: 0.875rem;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+        }
+
+        .status-dot.disconnected { background: var(--danger); }
+
+        .content { padding: 1.5rem; flex: 1; overflow-y: auto; }
+
+        /* Page sections */
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .page-title { font-size: 1.5rem; font-weight: 700; }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem;
+        }
+
+        .stat-card .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .stat-card .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .stat-card .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .stat-card .stat-label {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+        }
+
+        .stat-card .stat-change {
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .stat-change.positive { color: var(--success); }
+        .stat-change.negative { color: var(--danger); }
+
+        /* Charts */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem;
+        }
+
+        .chart-card h3 {
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+        }
+
+        /* Table */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th,
+        .data-table td {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.875rem;
+        }
+
+        .data-table th {
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .data-table tr:hover td { background: var(--bg-hover); }
+
+        .table-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* Badges */
+        .badge-status {
+            padding: 0.2rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-active { background: rgba(34,197,94,0.15); color: var(--success); }
+        .badge-inactive { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .badge-healthy { background: rgba(34,197,94,0.15); color: var(--success); }
+        .badge-unhealthy { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+        .badge-critical { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .badge-info { background: rgba(37,99,235,0.15); color: var(--primary); }
+
+        /* Progress bar */
+        .progress {
+            width: 100%;
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        .progress-fill.low { background: var(--success); }
+        .progress-fill.medium { background: var(--warning); }
+        .progress-fill.high { background: var(--danger); }
+
+        /* Buttons */
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: all 0.15s;
+        }
+
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .btn-outline:hover { background: var(--bg-hover); }
+
+        /* Alerts panel */
+        .alerts-panel {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .alert-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .alert-content { flex: 1; }
+        .alert-title { font-size: 0.85rem; font-weight: 600; }
+        .alert-time { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+        /* Login overlay */
+        .login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .login-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2.5rem;
+            width: 400px;
+            max-width: 90%;
+        }
+
+        .login-box h2 { text-align: center; margin-bottom: 1.5rem; }
+
+        .form-group { margin-bottom: 1rem; }
+        .form-group label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.375rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.625rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.875rem;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .login-error {
+            background: rgba(239,68,68,0.1);
+            border: 1px solid rgba(239,68,68,0.3);
+            color: var(--danger);
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        /* Live traffic */
+        .traffic-feed {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.75rem;
+        }
+
+        .traffic-entry {
+            padding: 0.25rem 0;
+            border-bottom: 1px solid rgba(51,65,85,0.5);
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .traffic-time { color: var(--text-muted); white-space: nowrap; }
+        .traffic-method { font-weight: 600; }
+        .traffic-method.GET { color: var(--success); }
+        .traffic-method.POST { color: var(--primary); }
+        .traffic-method.CONNECT { color: var(--warning); }
+        .traffic-url { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .traffic-status { min-width: 30px; }
+        .traffic-status.s2xx { color: var(--success); }
+        .traffic-status.s4xx { color: var(--warning); }
+        .traffic-status.s5xx { color: var(--danger); }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .charts-grid { grid-template-columns: 1fr; }
+            .sidebar { display: none; }
+            .main { margin-left: 0; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Overlay -->
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-box">
+            <div style="text-align:center;margin-bottom:1rem">
+                <div style="width:48px;height:48px;background:var(--primary);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:1.5rem">🛡</div>
+            </div>
+            <h2>Proxy Admin</h2>
+            <div class="login-error" id="loginError">Invalid credentials</div>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" class="form-input" id="loginUsername" placeholder="admin" value="admin">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" class="form-input" id="loginPassword" placeholder="Password">
+            </div>
+            <button class="btn btn-primary" style="width:100%;padding:0.75rem" onclick="doLogin()">Sign In</button>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">🛡</div>
+            <div>
+                <h1>ProxyNode</h1>
+                <div style="font-size:0.7rem;color:var(--text-muted)">Admin Panel</div>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section">
+                <div class="nav-section-title">Overview</div>
+                <div class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">📊 Dashboard</div>
+                <div class="nav-item" data-page="traffic" onclick="showPage('traffic')">📡 Live Traffic</div>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">Management</div>
+                <div class="nav-item" data-page="nodes" onclick="showPage('nodes')">🖥 Nodes</div>
+                <div class="nav-item" data-page="users" onclick="showPage('users')">👤 Users</div>
+                <div class="nav-item" data-page="routing" onclick="showPage('routing')">🗺 Routing Rules</div>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">Monitoring</div>
+                <div class="nav-item" data-page="analytics" onclick="showPage('analytics')">📈 Analytics</div>
+                <div class="nav-item" data-page="alerts" onclick="showPage('alerts')">
+                    🔔 Alerts <span class="badge" id="alertBadge" style="display:none">0</span>
+                </div>
+                <div class="nav-item" data-page="logs" onclick="showPage('logs')">📋 Audit Logs</div>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">System</div>
+                <div class="nav-item" data-page="config" onclick="showPage('config')">⚙ Configuration</div>
+                <div class="nav-item" data-page="backups" onclick="showPage('backups')">💾 Backups</div>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main">
+        <div class="topbar">
+            <div class="topbar-left">
+                <input type="text" class="search-box" placeholder="Search nodes, users, events...">
+            </div>
+            <div class="topbar-right">
+                <div class="connection-status">
+                    <div class="status-dot" id="wsStatus"></div>
+                    <span id="wsStatusText">Connected</span>
+                </div>
+                <button class="btn btn-outline" onclick="refreshDashboard()">↻ Refresh</button>
+                <button class="btn btn-outline" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Dashboard Page -->
+            <div class="page active" id="page-dashboard">
+                <div class="page-header">
+                    <h2 class="page-title">Dashboard</h2>
+                    <span style="color:var(--text-muted);font-size:0.85rem" id="lastUpdated"></span>
+                </div>
+
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">Total Nodes</span>
+                            <div class="stat-icon" style="background:rgba(37,99,235,0.15)">🖥</div>
+                        </div>
+                        <div class="stat-value" id="statTotalNodes">-</div>
+                        <div class="stat-change positive" id="statNodesChange"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">Active Nodes</span>
+                            <div class="stat-icon" style="background:rgba(34,197,94,0.15)">✓</div>
+                        </div>
+                        <div class="stat-value" id="statActiveNodes">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">Total Requests</span>
+                            <div class="stat-icon" style="background:rgba(245,158,11,0.15)">📊</div>
+                        </div>
+                        <div class="stat-value" id="statRequests">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">Bandwidth</span>
+                            <div class="stat-icon" style="background:rgba(168,85,247,0.15)">📶</div>
+                        </div>
+                        <div class="stat-value" id="statBandwidth">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">Users</span>
+                            <div class="stat-icon" style="background:rgba(59,130,246,0.15)">👤</div>
+                        </div>
+                        <div class="stat-value" id="statUsers">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">Active Alerts</span>
+                            <div class="stat-icon" style="background:rgba(239,68,68,0.15)">🔔</div>
+                        </div>
+                        <div class="stat-value" id="statAlerts">-</div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>Request Volume (24h)</h3>
+                        <div class="chart-container">
+                            <canvas id="requestChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Node Status Distribution</h3>
+                        <div class="chart-container">
+                            <canvas id="nodeStatusChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>Latency (ms)</h3>
+                        <div class="chart-container">
+                            <canvas id="latencyChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Traffic by Region</h3>
+                        <div class="chart-container">
+                            <canvas id="regionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nodes quick view -->
+                <div class="table-card" style="margin-top:1rem">
+                    <div class="table-header">
+                        <h3>Active Nodes</h3>
+                        <button class="btn btn-outline" onclick="showPage('nodes')">View All →</button>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Node</th>
+                                <th>Host</th>
+                                <th>Region</th>
+                                <th>Status</th>
+                                <th>Health</th>
+                                <th>Load</th>
+                                <th>Last Heartbeat</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nodesTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Live Traffic Page -->
+            <div class="page" id="page-traffic">
+                <div class="page-header">
+                    <h2 class="page-title">Live Traffic</h2>
+                    <div>
+                        <button class="btn btn-outline" id="trafficPauseBtn" onclick="toggleTrafficPause()">⏸ Pause</button>
+                        <button class="btn btn-outline" onclick="clearTraffic()">Clear</button>
+                    </div>
+                </div>
+                <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr)">
+                    <div class="stat-card">
+                        <div class="stat-label">Requests/sec</div>
+                        <div class="stat-value" id="trafficRps">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Active Connections</div>
+                        <div class="stat-value" id="trafficConnections">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Bandwidth (MB/s)</div>
+                        <div class="stat-value" id="trafficBandwidth">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Error Rate</div>
+                        <div class="stat-value" id="trafficErrors">0%</div>
+                    </div>
+                </div>
+                <div class="chart-card" style="margin-bottom:1rem">
+                    <div class="chart-container" style="height:150px">
+                        <canvas id="trafficRealtimeChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h3>Request Feed</h3>
+                    <div class="traffic-feed" id="trafficFeed"></div>
+                </div>
+            </div>
+
+            <!-- Nodes Page -->
+            <div class="page" id="page-nodes">
+                <div class="page-header">
+                    <h2 class="page-title">Proxy Nodes</h2>
+                    <button class="btn btn-primary" onclick="showAddNodeModal()">+ Add Node</button>
+                </div>
+                <div class="table-card">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Host:Port</th>
+                                <th>Region</th>
+                                <th>Status</th>
+                                <th>Health</th>
+                                <th>Load / Capacity</th>
+                                <th>Uptime</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="allNodesTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Users Page -->
+            <div class="page" id="page-users">
+                <div class="page-header">
+                    <h2 class="page-title">Users</h2>
+                    <button class="btn btn-primary" onclick="showAddUserModal()">+ Add User</button>
+                </div>
+                <div class="table-card">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Requests Used</th>
+                                <th>Bandwidth Used</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Routing Page -->
+            <div class="page" id="page-routing">
+                <div class="page-header">
+                    <h2 class="page-title">Routing Rules</h2>
+                    <button class="btn btn-primary" onclick="showAddRuleModal()">+ Add Rule</button>
+                </div>
+                <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom:1.5rem">
+                    <div class="stat-card">
+                        <div class="stat-label">Active Rules</div>
+                        <div class="stat-value" id="routingActiveRules">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Geo-Blocked Regions</div>
+                        <div class="stat-value" id="routingBlockedRegions">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Compliance Zones</div>
+                        <div class="stat-value" id="routingComplianceZones">0</div>
+                    </div>
+                </div>
+                <div class="table-card">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Priority</th>
+                                <th>Action</th>
+                                <th>Conditions</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="routingTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Analytics Page -->
+            <div class="page" id="page-analytics">
+                <div class="page-header">
+                    <h2 class="page-title">Analytics</h2>
+                    <div>
+                        <select class="form-input" style="width:auto;display:inline-block" id="analyticsRange" onchange="loadAnalytics()">
+                            <option value="1h">Last Hour</option>
+                            <option value="24h" selected>Last 24 Hours</option>
+                            <option value="7d">Last 7 Days</option>
+                            <option value="30d">Last 30 Days</option>
+                        </select>
+                        <button class="btn btn-outline" onclick="exportAnalytics()">📥 Export</button>
+                    </div>
+                </div>
+                <div class="stats-grid" id="analyticsStats"></div>
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>Hourly Distribution</h3>
+                        <div class="chart-container">
+                            <canvas id="analyticsHourlyChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Error Breakdown</h3>
+                        <div class="chart-container">
+                            <canvas id="analyticsErrorChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-card" style="margin-top:1rem">
+                    <div class="table-header"><h3>Top Nodes by Traffic</h3></div>
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Node ID</th><th>Requests</th><th>Bandwidth</th></tr>
+                        </thead>
+                        <tbody id="topNodesTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Alerts Page -->
+            <div class="page" id="page-alerts">
+                <div class="page-header">
+                    <h2 class="page-title">Alerts</h2>
+                    <button class="btn btn-primary" onclick="checkAlerts()">Run Alert Check</button>
+                </div>
+                <div class="chart-card" style="margin-bottom:1rem">
+                    <h3>Active Alerts</h3>
+                    <div class="alerts-panel" id="activeAlertsPanel">
+                        <div style="text-align:center;padding:2rem;color:var(--text-muted)">No active alerts</div>
+                    </div>
+                </div>
+                <div class="table-card">
+                    <div class="table-header"><h3>Alert History</h3></div>
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Time</th><th>Rule</th><th>Severity</th><th>Message</th></tr>
+                        </thead>
+                        <tbody id="alertHistoryBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Audit Logs Page -->
+            <div class="page" id="page-logs">
+                <div class="page-header">
+                    <h2 class="page-title">Audit Logs</h2>
+                    <button class="btn btn-outline" onclick="exportAuditLogs()">📥 Export</button>
+                </div>
+                <div class="table-card">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Time</th><th>Action</th><th>User</th><th>Severity</th><th>Details</th></tr>
+                        </thead>
+                        <tbody id="auditLogBody">
+                            <tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Config Page -->
+            <div class="page" id="page-config">
+                <div class="page-header">
+                    <h2 class="page-title">Configuration</h2>
+                    <button class="btn btn-primary" onclick="saveConfig()">Save Changes</button>
+                </div>
+                <div class="chart-card" id="configPanel">
+                    <p style="color:var(--text-muted)">Loading configuration...</p>
+                </div>
+            </div>
+
+            <!-- Backups Page -->
+            <div class="page" id="page-backups">
+                <div class="page-header">
+                    <h2 class="page-title">Backups</h2>
+                    <button class="btn btn-primary" onclick="createBackup()">Create Backup</button>
+                </div>
+                <div class="table-card">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Filename</th><th>Size</th><th>Created</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody id="backupsTableBody">
+                            <tr><td colspan="4" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const API_URL = window.location.origin.includes('8080')
+        ? window.location.origin.replace(':8080', ':3000')
+        : (window.location.origin || 'http://localhost:3000');
+    let token = localStorage.getItem('admin_token');
+    let socket = null;
+    let charts = {};
+    let trafficPaused = false;
+    let trafficEntries = [];
+
+    // Authentication
+    async function doLogin() {
+        const username = document.getElementById('loginUsername').value;
+        const password = document.getElementById('loginPassword').value;
+        try {
+            const res = await api('POST', '/api/users/auth', { username, password });
+            token = res.token;
+            localStorage.setItem('admin_token', token);
+            document.getElementById('loginOverlay').style.display = 'none';
+            initDashboard();
+        } catch (e) {
+            document.getElementById('loginError').style.display = 'block';
+            document.getElementById('loginError').textContent = e.message || 'Login failed';
+        }
+    }
+
+    function logout() {
+        localStorage.removeItem('admin_token');
+        location.reload();
+    }
+
+    // API helper
+    async function api(method, endpoint, body) {
+        const opts = {
+            method,
+            headers: { 'Content-Type': 'application/json' }
+        };
+        if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+        if (body) opts.body = JSON.stringify(body);
+        const res = await fetch(`${API_URL}${endpoint}`, opts);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Request failed');
+        return data;
+    }
+
+    // Page navigation
+    function showPage(page) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.getElementById(`page-${page}`).classList.add('active');
+        document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
+        loadPageData(page);
+    }
+
+    function loadPageData(page) {
+        switch(page) {
+            case 'dashboard': loadDashboard(); break;
+            case 'nodes': loadAllNodes(); break;
+            case 'users': loadUsers(); break;
+            case 'analytics': loadAnalytics(); break;
+            case 'alerts': loadAlerts(); break;
+            case 'backups': loadBackups(); break;
+            case 'config': loadConfig(); break;
+        }
+    }
+
+    // Initialize
+    function initDashboard() {
+        connectWebSocket();
+        initCharts();
+        loadDashboard();
+    }
+
+    function connectWebSocket() {
+        socket = io(API_URL);
+        socket.on('connect', () => {
+            document.getElementById('wsStatus').classList.remove('disconnected');
+            document.getElementById('wsStatusText').textContent = 'Connected';
+        });
+        socket.on('disconnect', () => {
+            document.getElementById('wsStatus').classList.add('disconnected');
+            document.getElementById('wsStatusText').textContent = 'Disconnected';
+        });
+        socket.on('node:heartbeat', () => loadDashboard());
+        socket.on('node:registered', () => loadDashboard());
+    }
+
+    // Charts initialization
+    function initCharts() {
+        const chartDefaults = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#94a3b8' } } },
+            scales: {
+                x: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
+                y: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } }
+            }
+        };
+
+        charts.requests = new Chart(document.getElementById('requestChart'), {
+            type: 'line',
+            data: { labels: [], datasets: [
+                { label: 'Requests', data: [], borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)', fill: true, tension: 0.4 },
+                { label: 'Errors', data: [], borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, tension: 0.4 }
+            ]},
+            options: chartDefaults
+        });
+
+        charts.nodeStatus = new Chart(document.getElementById('nodeStatusChart'), {
+            type: 'doughnut',
+            data: { labels: ['Active', 'Inactive', 'Unhealthy'], datasets: [{
+                data: [0, 0, 0],
+                backgroundColor: ['#22c55e', '#64748b', '#ef4444']
+            }]},
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8' } } } }
+        });
+
+        charts.latency = new Chart(document.getElementById('latencyChart'), {
+            type: 'bar',
+            data: { labels: [], datasets: [{ label: 'Avg Latency (ms)', data: [], backgroundColor: '#f59e0b' }] },
+            options: chartDefaults
+        });
+
+        charts.region = new Chart(document.getElementById('regionChart'), {
+            type: 'pie',
+            data: { labels: [], datasets: [{ data: [], backgroundColor: ['#2563eb','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899'] }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#94a3b8' } } } }
+        });
+    }
+
+    // Load dashboard data
+    async function loadDashboard() {
+        try {
+            const [statsRes, nodesRes, hourlyRes] = await Promise.all([
+                api('GET', '/api/stats/overview'),
+                api('GET', '/api/nodes'),
+                api('GET', '/api/analytics/hourly?hours=24').catch(() => ({ stats: [] }))
+            ]);
+
+            const stats = statsRes.stats;
+            document.getElementById('statTotalNodes').textContent = stats.totalNodes;
+            document.getElementById('statActiveNodes').textContent = stats.activeNodes;
+            document.getElementById('statRequests').textContent = formatNumber(stats.totalRequests);
+            document.getElementById('statBandwidth').textContent = formatBytes(stats.bandwidthUsed);
+            document.getElementById('statUsers').textContent = stats.users || 0;
+            document.getElementById('statAlerts').textContent = stats.alerts || 0;
+            document.getElementById('lastUpdated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+
+            // Update node status chart
+            const nodes = nodesRes.nodes || [];
+            const active = nodes.filter(n => n.status === 'active').length;
+            const inactive = nodes.filter(n => n.status === 'inactive').length;
+            const unhealthy = nodes.filter(n => n.health === 'unhealthy').length;
+            charts.nodeStatus.data.datasets[0].data = [active, inactive, unhealthy];
+            charts.nodeStatus.update();
+
+            // Update hourly chart
+            if (hourlyRes.stats) {
+                charts.requests.data.labels = hourlyRes.stats.map(s => s.hour?.split('T')[1] || '');
+                charts.requests.data.datasets[0].data = hourlyRes.stats.map(s => s.requests);
+                charts.requests.data.datasets[1].data = hourlyRes.stats.map(s => s.errors);
+                charts.requests.update();
+            }
+
+            // Update region chart
+            const regionCounts = {};
+            nodes.forEach(n => { regionCounts[n.region || 'unknown'] = (regionCounts[n.region || 'unknown'] || 0) + 1; });
+            charts.region.data.labels = Object.keys(regionCounts);
+            charts.region.data.datasets[0].data = Object.values(regionCounts);
+            charts.region.update();
+
+            // Update nodes table
+            renderNodesTable(nodes, 'nodesTableBody', true);
+        } catch (e) {
+            console.error('Dashboard load error:', e);
+        }
+    }
+
+    function renderNodesTable(nodes, targetId, compact) {
+        const tbody = document.getElementById(targetId);
+        if (!nodes || nodes.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">No nodes registered</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = nodes.map(n => {
+            const util = ((n.currentLoad / (n.capacity || 1)) * 100).toFixed(0);
+            const utilClass = util < 50 ? 'low' : util < 80 ? 'medium' : 'high';
+            return `<tr>
+                ${compact ? '' : `<td style="font-family:monospace;font-size:0.75rem">${n.id}</td>`}
+                <td><strong>${n.name}</strong></td>
+                <td style="font-family:monospace">${n.host}:${n.port}</td>
+                <td>${n.region}</td>
+                <td><span class="badge-status badge-${n.status}">${n.status}</span></td>
+                <td><span class="badge-status badge-${n.health}">${n.health}</span></td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:0.5rem">
+                        <div class="progress" style="width:80px"><div class="progress-fill ${utilClass}" style="width:${util}%"></div></div>
+                        <span style="font-size:0.8rem">${util}%</span>
+                    </div>
+                </td>
+                <td style="font-size:0.8rem;color:var(--text-muted)">${n.lastHeartbeat ? timeAgo(n.lastHeartbeat) : 'Never'}</td>
+                ${compact ? '' : `<td><button class="btn btn-outline" style="font-size:0.7rem" onclick="removeNode('${n.id}')">Remove</button></td>`}
+            </tr>`;
+        }).join('');
+    }
+
+    async function loadAllNodes() {
+        try {
+            const res = await api('GET', '/api/nodes');
+            renderNodesTable(res.nodes, 'allNodesTableBody', false);
+        } catch (e) { console.error(e); }
+    }
+
+    async function loadUsers() {
+        try {
+            const res = await api('GET', '/api/users');
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = (res.users || []).map(u => `<tr>
+                <td><strong>${u.username}</strong></td>
+                <td>${u.email || '-'}</td>
+                <td><span class="badge-status badge-info">${u.role}</span></td>
+                <td><span class="badge-status badge-${u.status === 'active' ? 'active' : 'inactive'}">${u.status}</span></td>
+                <td>${formatNumber(u.usage?.requests || 0)} / ${formatNumber(u.quota?.requests || 0)}</td>
+                <td>${formatBytes(u.usage?.bandwidth || 0)} / ${formatBytes(u.quota?.bandwidth || 0)}</td>
+                <td style="font-size:0.8rem">${new Date(u.createdAt).toLocaleDateString()}</td>
+                <td><button class="btn btn-outline" style="font-size:0.7rem" onclick="deleteUser('${u.id}')">Delete</button></td>
+            </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">No users</td></tr>';
+        } catch (e) { console.error(e); }
+    }
+
+    async function loadAnalytics() {
+        try {
+            const range = document.getElementById('analyticsRange')?.value || '24h';
+            const res = await api('GET', `/api/analytics/stats?range=${range}`);
+            const statsDiv = document.getElementById('analyticsStats');
+            const s = res.stats;
+            statsDiv.innerHTML = `
+                <div class="stat-card"><div class="stat-label">Total Events</div><div class="stat-value">${formatNumber(s.totalRequests)}</div></div>
+                <div class="stat-card"><div class="stat-label">Registrations</div><div class="stat-value">${formatNumber(s.nodeRegistrations)}</div></div>
+                <div class="stat-card"><div class="stat-label">Proxy Requests</div><div class="stat-value">${formatNumber(s.proxyRequests)}</div></div>
+                <div class="stat-card"><div class="stat-label">Errors</div><div class="stat-value">${formatNumber(s.errors)}</div></div>
+            `;
+        } catch (e) { console.error(e); }
+    }
+
+    async function loadAlerts() {
+        try {
+            const [activeRes, historyRes] = await Promise.all([
+                api('GET', '/api/alerts/active'),
+                api('GET', '/api/alerts/history?limit=50')
+            ]);
+            const panel = document.getElementById('activeAlertsPanel');
+            const alerts = activeRes.alerts || [];
+            if (alerts.length === 0) {
+                panel.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-muted)">No active alerts ✓</div>';
+            } else {
+                panel.innerHTML = alerts.map(a => `
+                    <div class="alert-item">
+                        <div class="alert-icon" style="background:${a.severity==='critical'?'rgba(239,68,68,0.15)':'rgba(245,158,11,0.15)'}">
+                            ${a.severity === 'critical' ? '🔴' : '🟡'}
+                        </div>
+                        <div class="alert-content">
+                            <div class="alert-title">${a.ruleName}</div>
+                            <div style="font-size:0.8rem;color:var(--text-muted)">${a.message}</div>
+                            <div class="alert-time">${timeAgo(a.timestamp)}</div>
+                        </div>
+                        <span class="badge-status badge-${a.severity}">${a.severity}</span>
+                    </div>
+                `).join('');
+            }
+            const historyBody = document.getElementById('alertHistoryBody');
+            historyBody.innerHTML = (historyRes.alerts || []).map(a => `<tr>
+                <td style="font-size:0.8rem">${new Date(a.timestamp).toLocaleString()}</td>
+                <td>${a.ruleName}</td>
+                <td><span class="badge-status badge-${a.severity}">${a.severity}</span></td>
+                <td style="font-size:0.85rem">${a.message}</td>
+            </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No alerts</td></tr>';
+        } catch (e) { console.error(e); }
+    }
+
+    async function loadBackups() {
+        try {
+            const res = await api('GET', '/api/backup/list');
+            const tbody = document.getElementById('backupsTableBody');
+            tbody.innerHTML = (res.backups || []).map(b => `<tr>
+                <td style="font-family:monospace;font-size:0.8rem">${b.filename}</td>
+                <td>${formatBytes(b.size)}</td>
+                <td>${new Date(b.createdAt).toLocaleString()}</td>
+                <td>
+                    <button class="btn btn-outline" style="font-size:0.7rem" onclick="restoreBackup('${b.filename}')">Restore</button>
+                    <button class="btn btn-danger" style="font-size:0.7rem;margin-left:0.25rem" onclick="deleteBackup('${b.filename}')">Delete</button>
+                </td>
+            </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No backups</td></tr>';
+        } catch (e) { console.error(e); }
+    }
+
+    async function loadConfig() {
+        try {
+            const res = await api('GET', '/api/config/system');
+            const panel = document.getElementById('configPanel');
+            const cfg = res.config;
+            panel.innerHTML = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
+                    <div>
+                        <h3 style="margin-bottom:1rem">Load Balancing</h3>
+                        <div class="form-group"><label>Strategy</label>
+                            <select class="form-input" id="cfgLbStrategy">
+                                <option ${cfg.loadBalancing?.strategy?.value==='round-robin'?'selected':''}>round-robin</option>
+                                <option ${cfg.loadBalancing?.strategy?.value==='least-connections'?'selected':''}>least-connections</option>
+                                <option ${cfg.loadBalancing?.strategy?.value==='weighted'?'selected':''}>weighted</option>
+                                <option ${cfg.loadBalancing?.strategy?.value==='geographic'?'selected':''}>geographic</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 style="margin-bottom:1rem">Rate Limiting</h3>
+                        <div class="form-group"><label>Default Limit (req/min)</label>
+                            <input type="number" class="form-input" id="cfgRateLimit" value="${cfg.rateLimiting?.defaultLimit?.value || 100}">
+                        </div>
+                    </div>
+                    <div>
+                        <h3 style="margin-bottom:1rem">Monitoring</h3>
+                        <div class="form-group"><label>Health Check Interval (ms)</label>
+                            <input type="number" class="form-input" id="cfgHealthInterval" value="${cfg.monitoring?.interval?.value || 30000}">
+                        </div>
+                    </div>
+                    <div>
+                        <h3 style="margin-bottom:1rem">Alerts</h3>
+                        <div class="form-group"><label>Webhook URL</label>
+                            <input type="text" class="form-input" id="cfgWebhook" value="${cfg.alerts?.webhook?.value || ''}" placeholder="https://hooks.slack.com/...">
+                        </div>
+                    </div>
+                </div>
+            `;
+        } catch (e) { console.error(e); }
+    }
+
+    async function createBackup() {
+        try { await api('POST', '/api/backup/create'); loadBackups(); } catch (e) { alert(e.message); }
+    }
+    async function checkAlerts() {
+        try { await api('POST', '/api/alerts/check'); loadAlerts(); } catch (e) { alert(e.message); }
+    }
+    async function removeNode(id) {
+        if (!confirm('Remove this node?')) return;
+        try { await api('DELETE', `/api/nodes/${id}`); loadDashboard(); loadAllNodes(); } catch (e) { alert(e.message); }
+    }
+    async function deleteUser(id) {
+        if (!confirm('Delete this user?')) return;
+        try { await api('DELETE', `/api/users/${id}`); loadUsers(); } catch (e) { alert(e.message); }
+    }
+    function refreshDashboard() { loadDashboard(); }
+    function toggleTrafficPause() { trafficPaused = !trafficPaused; document.getElementById('trafficPauseBtn').textContent = trafficPaused ? '▶ Resume' : '⏸ Pause'; }
+    function clearTraffic() { document.getElementById('trafficFeed').innerHTML = ''; }
+
+    // Utility functions
+    function formatNumber(n) {
+        if (n === null || n === undefined) return '0';
+        n = parseInt(n);
+        if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+        if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+        if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+        return n.toString();
+    }
+
+    function formatBytes(bytes) {
+        if (!bytes) return '0 B';
+        bytes = parseInt(bytes);
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + (units[i] || 'B');
+    }
+
+    function timeAgo(date) {
+        const seconds = Math.floor((Date.now() - new Date(date)) / 1000);
+        if (seconds < 60) return seconds + 's ago';
+        if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+        if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+        return Math.floor(seconds / 86400) + 'd ago';
+    }
+
+    // Auto-refresh
+    setInterval(() => { if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(); }, 30000);
+
+    // Check auth on load
+    if (token) {
+        document.getElementById('loginOverlay').style.display = 'none';
+        initDashboard();
+    }
+
+    // Handle enter key on login
+    document.getElementById('loginPassword').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') doLogin();
+    });
+    </script>
+</body>
+</html>

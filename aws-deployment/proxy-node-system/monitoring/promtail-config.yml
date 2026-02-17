@@ -1,0 +1,84 @@
+# ===========================================
+# Promtail Configuration - Log Shipper
+# ===========================================
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    batchwait: 1s
+    batchsize: 1048576
+    timeout: 10s
+
+scrape_configs:
+  # Control Plane logs
+  - job_name: control-plane
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: control-plane
+          service: proxy-api
+          __path__: /var/log/control-plane/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            message: message
+            timestamp: timestamp
+      - labels:
+          level:
+      - timestamp:
+          source: timestamp
+          format: "2006-01-02T15:04:05.000Z"
+
+  # Squid Access logs
+  - job_name: squid-access
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: squid
+          service: proxy-node
+          log_type: access
+          __path__: /var/log/squid/access.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\d+\.\d+)\s+(?P<duration>\d+)\s+(?P<client_ip>[^\s]+)\s+(?P<result_code>[^\s]+)\s+(?P<bytes>\d+)\s+(?P<method>[^\s]+)\s+(?P<url>[^\s]+)\s+(?P<user>[^\s]+)\s+(?P<hierarchy>[^\s]+)\s+(?P<content_type>[^\s]+)'
+      - labels:
+          method:
+          result_code:
+          client_ip:
+      - metrics:
+          squid_requests_total:
+            type: Counter
+            description: "Total squid proxy requests"
+            source: result_code
+            config:
+              action: inc
+          squid_bytes_total:
+            type: Counter
+            description: "Total bytes transferred"
+            source: bytes
+            config:
+              action: add
+
+  # Squid Cache logs
+  - job_name: squid-cache
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: squid
+          service: proxy-node
+          log_type: cache
+          __path__: /var/log/squid/cache.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})\|?\s*(?P<message>.+)'
+      - labels: {}
